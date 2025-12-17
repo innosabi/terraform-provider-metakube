@@ -38,6 +38,18 @@ variable "dc_name" {
   default     = "syseleven-dbl1"
 }
 
+variable "kube_services_cidr" {
+  type    = string
+  ## Kubernetes default
+  default = "172.17.17.0/24"
+}
+
+variable "kube_pod_cidr" {
+  type    = string
+  ## Kubernetes default
+  default = "172.16.0.0/16"
+}
+
 variable "floating_ip_pool" {
   description = "Floating IP pool to use for all worker nodes"
   type        = string

@@ -22,62 +22,15 @@ terraform {
 //  domain_name = "Default"
 // }
 
-# Create openstack security for cluster internal network.
-resource "openstack_networking_secgroup_v2" "cluster-net" {
-  name = var.server_group_name
-}
-
-# Add rules to internal networks security group.
-resource "openstack_networking_secgroup_rule_v2" "allow_ipv4_within_group" {
-  direction         = "ingress"
-  ethertype         = "IPv4"
-  remote_group_id   = openstack_networking_secgroup_v2.cluster-net.id
-  security_group_id = openstack_networking_secgroup_v2.cluster-net.id
-}
-resource "openstack_networking_secgroup_rule_v2" "allow_ipv6_within_group" {
-  direction         = "ingress"
-  ethertype         = "IPv6"
-  remote_group_id   = openstack_networking_secgroup_v2.cluster-net.id
-  security_group_id = openstack_networking_secgroup_v2.cluster-net.id
-}
-resource "openstack_networking_secgroup_rule_v2" "allow_ssh" {
-  direction         = "ingress"
-  ethertype         = "IPv4"
-  port_range_min    = 22
-  port_range_max    = 22
-  protocol          = "tcp"
-  security_group_id = openstack_networking_secgroup_v2.cluster-net.id
-}
-resource "openstack_networking_secgroup_rule_v2" "allow_icmp" {
-  direction         = "ingress"
-  ethertype         = "IPv4"
-  protocol          = "icmp"
-  security_group_id = openstack_networking_secgroup_v2.cluster-net.id
-}
-resource "openstack_networking_secgroup_rule_v2" "allow_icmp6" {
-  direction         = "ingress"
-  ethertype         = "IPv6"
-  protocol          = "ipv6-icmp"
-  security_group_id = openstack_networking_secgroup_v2.cluster-net.id
-}
-resource "openstack_networking_secgroup_rule_v2" "allow_higher_ports" {
-  direction         = "ingress"
-  ethertype         = "IPv4"
-  protocol          = "tcp"
-  security_group_id = openstack_networking_secgroup_v2.cluster-net.id
-  port_range_min    = 30000
-  port_range_max    = 32767
-  remote_ip_prefix  = "192.168.1.0/24"
-}
-
 # Create cluster internal network.
-resource "openstack_networking_network_v2" "network_1" {
+resource "openstack_networking_network_v2" "network" {
   name           = var.cluster_network_name
   admin_state_up = true
 }
-resource "openstack_networking_subnet_v2" "subnet_1" {
+
+resource "openstack_networking_subnet_v2" "subnet" {
   name        = var.subnet_name
-  network_id  = openstack_networking_network_v2.network_1.id
+  network_id  = openstack_networking_network_v2.network.id
   cidr        = "192.168.1.0/24"
   ip_version  = 4
   enable_dhcp = true
@@ -88,7 +41,102 @@ resource "openstack_networking_subnet_v2" "subnet_1" {
   # Internal IPs of DNS Servers in the cloud.
   dns_nameservers = [
     "37.123.105.116",
-  "37.123.105.117"]
+    "37.123.105.117",
+  ]
+}
+
+# Create openstack security for cluster internal network.
+resource "openstack_networking_secgroup_v2" "sg" {
+  name                 = "${var.cluster_name}-cluster-sg"
+  description          = "Security group for Metakube cluster ${var.cluster_name}"
+  delete_default_rules = false
+}
+
+## Allow all traffic within the security group (applies to all servers using this SG)
+resource "openstack_networking_secgroup_rule_v2" "ingress_ipv4_within_group" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  remote_group_id   = openstack_networking_secgroup_v2.sg.id
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "egress_ipv4_within_group" {
+  direction         = "egress"
+  ethertype         = "IPv4"
+  remote_group_id   = openstack_networking_secgroup_v2.sg.id
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ingress_ipv6_within_group" {
+  direction         = "ingress"
+  ethertype         = "IPv6"
+  remote_group_id   = openstack_networking_secgroup_v2.sg.id
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "egress_ipv6_within_group" {
+  direction         = "egress"
+  ethertype         = "IPv6"
+  remote_group_id   = openstack_networking_secgroup_v2.sg.id
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+#resource "openstack_networking_secgroup_rule_v2" "allow_ssh" {
+#  direction         = "ingress"
+#  ethertype         = "IPv4"
+#  port_range_min    = 22
+#  port_range_max    = 22
+#  protocol          = "tcp"
+#  security_group_id = openstack_networking_secgroup_v2.sg.id
+#}
+
+resource "openstack_networking_secgroup_rule_v2" "ingress_icmp" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "icmp"
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ingress_icmp6" {
+  direction         = "ingress"
+  ethertype         = "IPv6"
+  protocol          = "ipv6-icmp"
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ingress_tcp_node_ports" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "tcp"
+  port_range_min    = 30000
+  port_range_max    = 32767
+  remote_ip_prefix  = openstack_networking_subnet_v2.subnet.cidr
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ingress_udp_node_ports" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "udp"
+  port_range_min    = 30000
+  port_range_max    = 32767
+  remote_ip_prefix  = openstack_networking_subnet_v2.subnet.cidr
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+## Allow traffic to and from Kubernetes services and pods CIDR
+resource "openstack_networking_secgroup_rule_v2" "ingress_kube_services_cidr" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  remote_ip_prefix  = var.kube_services_cidr
+  security_group_id = openstack_networking_secgroup_v2.sg.id
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ingress_kube_pods_cidr" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  remote_ip_prefix  = var.kube_pod_cidr
+  security_group_id = openstack_networking_secgroup_v2.sg.id
 }
 
 resource "openstack_compute_servergroup_v2" "anti-affinity" {
@@ -110,7 +158,6 @@ resource "openstack_networking_router_interface_v2" "router_interface_1" {
   subnet_id = openstack_networking_subnet_v2.subnet_1.id
 }
 
-
 # The latest Ubuntu 18.04 image available.
 data "openstack_images_image_v2" "image" {
   most_recent = true
@@ -118,7 +165,7 @@ data "openstack_images_image_v2" "image" {
   visibility = "public"
   properties = {
     os_distro  = "ubuntu"
-    os_version = "18.04"
+    os_version = "24.04"
   }
 }
 
@@ -136,7 +183,7 @@ resource "metakube_sshkey" "local" {
 
 data "metakube_k8s_version" "cluster" {
   major = "1"
-  minor = "26"
+  minor = "33"
 }
 
 resource "metakube_cluster" "cluster" {
@@ -164,20 +211,24 @@ resource "metakube_cluster" "cluster" {
           password     = var.password
         }
         floating_ip_pool = data.openstack_networking_network_v2.external.name
-        security_group   = openstack_networking_secgroup_v2.cluster-net.name
-        network          = openstack_networking_network_v2.network_1.name
-        subnet_id        = openstack_networking_subnet_v2.subnet_1.id
-        subnet_cidr      = openstack_networking_secgroup_rule_v2.allow_higher_ports.remote_ip_prefix
+        security_group   = openstack_networking_secgroup_v2.sg.name
+        network          = openstack_networking_network_v2.network.name
+        subnet_id        = openstack_networking_subnet_v2.subnet.id
+        subnet_cidr      = openstack_networking_subnet_v2.subnet.cidr
         server_group_id  = openstack_compute_servergroup_v2.anti-affinity.id
       }
+    }
+
+    cni_plugin {
+      type    = "cilium"
     }
 
     # enable audit logging
     audit_logging       = true
     pod_node_selector   = true
     pod_security_policy = true
-    services_cidr       = "10.240.16.0/20"
-    pods_cidr           = "172.25.0.0/16"
+    services_cidr       = var.kube_services_cidr
+    pods_cidr           = var.kube_pod_cidr
   }
 }
 
